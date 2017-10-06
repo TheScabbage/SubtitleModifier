@@ -150,9 +150,8 @@ namespace SubtitleModifier
         {
             //DoTesting();
             Console.WriteLine("Hit CTRL-C at any time to quit.");
-
             RunConverter();
-
+            Console.ReadKey();
         }
 
         static void RunConverter()
@@ -166,7 +165,7 @@ namespace SubtitleModifier
 
                 if (!File.Exists(path))
                 {
-                    if (!String.IsNullOrEmpty(path))
+                    if (!string.IsNullOrEmpty(path))
                     {
                         Console.WriteLine("\nThe specified file '" + path + "' doesn't exist.");
                         Console.WriteLine("Re-enter file path or CTRL-C to exit.");
@@ -174,7 +173,6 @@ namespace SubtitleModifier
                     path = "";
                 }
             }
-
             string fileType = path.Substring(path.LastIndexOf("."));
             string fileName = path.Substring(0, path.LastIndexOf("."));
             Console.WriteLine("File type: " + fileType);
@@ -188,15 +186,14 @@ namespace SubtitleModifier
                 string ans = Console.ReadLine().ToLower();
                 if (ans != "y" && ans != "yes")
                 {
-
                     return;
                 }
             }
-
             List<string> headerText = new List<string>();
             List<string> subLines = new List<string>();
             string temp = "";
 
+            Console.WriteLine("Reading input file...");
             // get subtitle file into a buffered text reader
             using (StreamReader reader = File.OpenText(path))
             {
@@ -221,7 +218,6 @@ namespace SubtitleModifier
                     }
                 } while (temp != null);
             }
-
             double fromFPS = 0f, toFPS = 0f, offset = 0d;
             double[] dArgs;
             Console.WriteLine("Enter the FPS of the source file.\nOptionally, add an offset, in seconds, here.\neg. '25 2.5' would be 25FPS with an offset of 2.5 seconds.");
@@ -242,6 +238,7 @@ namespace SubtitleModifier
 
             temp = "";
             string[] line;
+            Console.WriteLine("Writing to file " + outputFile + "...");
             using (StreamWriter writer = File.CreateText(outputFile))
             {
                 // write the header information
@@ -273,6 +270,7 @@ namespace SubtitleModifier
                     writer.WriteLine(line[3]);
                 }
             }
+            Console.WriteLine("Conversion complete.");
         }
 
         
@@ -301,7 +299,6 @@ namespace SubtitleModifier
             {
                 try
                 {
-                    Console.WriteLine("=========");
                     input = Console.ReadLine().Split(' ');
                     if(input.Length < minLength)
                     {
