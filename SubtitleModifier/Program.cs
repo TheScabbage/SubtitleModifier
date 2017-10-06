@@ -267,7 +267,13 @@ namespace SubtitleModifier
                     writer.Write(FN_SEPARATOR);
 
                     // now write the filename of this subtitle
-                    writer.WriteLine(line[3]);
+                    writer.Write(line[3]);
+
+                    // Don't write a newline if this is the last line of the file
+                    if(ii < subLines.Count - 1)
+                    {
+                        writer.WriteLine();
+                    }
                 }
             }
             Console.WriteLine("Conversion complete.");
