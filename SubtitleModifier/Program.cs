@@ -50,12 +50,12 @@ namespace SubtitleModifier
             ff = frames;
         }
 
-        public Timecode(double absoluteTime, double framerate)
+        public Timecode(decimal absoluteTime, decimal framerate)
         {
-            double remainingTime = absoluteTime;
-            hh = (int)(remainingTime / 3600d);
+            decimal remainingTime = absoluteTime;
+            hh = (int)(remainingTime / 3600m);
             remainingTime -= hh * 3600;
-            mm = (int)(remainingTime / 60d);
+            mm = (int)(remainingTime / 60m);
             remainingTime -= mm * 60;
             ss = (int)remainingTime;
             remainingTime -= ss;
@@ -80,11 +80,11 @@ namespace SubtitleModifier
         /// Gives the value of this timecode in absolute time, assuming the timecode is in the given framerate.
         /// </summary>
         /// <returns></returns>
-        public double GetAbsoluteTime(double framerate)
+        public decimal GetAbsoluteTime(decimal framerate)
         {
-            double result = 0d;
-            result += 3600d * hh;
-            result += 60d * mm;
+            decimal result = 0m;
+            result += 3600m * hh;
+            result += 60m * mm;
             result += ss;
             result += ff / framerate;
             return result;
@@ -96,10 +96,10 @@ namespace SubtitleModifier
         /// <param name="fps1"></param>
         /// <param name="fps2"></param>
         /// <returns></returns>
-        public Timecode FromToFramerate(double fps1, double fps2)
+        public Timecode FromToFramerate(decimal fps1, decimal fps2)
         {
             // Get the absolute time of this code in fps1:
-            double abs = GetAbsoluteTime(fps1);
+            decimal abs = GetAbsoluteTime(fps1);
             Timecode t2 = new Timecode(ConvertTime(abs, fps1, fps2), fps2);
             return t2;
         }
@@ -111,10 +111,10 @@ namespace SubtitleModifier
         /// <param name="fps2"></param>
         /// <param name="offset"></param>
         /// <returns></returns>
-        public Timecode FromToFramerate(double fps1, double fps2, double offset)
+        public Timecode FromToFramerate(decimal fps1, decimal fps2, decimal offset)
         {
             // Get the absolute time of this code in fps1:
-            double abs = GetAbsoluteTime(fps1);
+            decimal abs = GetAbsoluteTime(fps1);
             // Add the offset
             abs += offset;
             Timecode t2 = new Timecode(ConvertTime(abs, fps1, fps2), fps2);
@@ -127,7 +127,7 @@ namespace SubtitleModifier
         }
 
         
-        public static double ConvertTime(double abs, double fps1, double fps2)
+        public static decimal ConvertTime(decimal abs, decimal fps1, decimal fps2)
         {
             return abs * fps1 / fps2;
         }
@@ -224,8 +224,8 @@ namespace SubtitleModifier
                     }
                 } while (temp != null);
             }
-            double fromFPS = 0f, toFPS = 0f, offset = 0d;
-            double[] dArgs;
+            decimal fromFPS = 0m, toFPS = 0m, offset = 0m;
+            decimal[] dArgs;
             Console.WriteLine("Enter the FPS of the source file.\nOptionally, add an offset, in seconds, here.\neg. '25 2.5' would be 25FPS with an offset of 2.5 seconds.");
             dArgs = GetDoubleArrFromUser(1);
             fromFPS = dArgs[0];
@@ -336,14 +336,14 @@ namespace SubtitleModifier
             Console.WriteLine("[Debug] " + msg);
         }
         
-        static double GetDoubleFromUser()
+        static decimal GetDoubleFromUser()
         {
-            double res = 0;
+            decimal res = 0;
             while (res <= 0)
             {
                 try
                 {
-                    res = double.Parse(Console.ReadLine());
+                    res = decimal.Parse(Console.ReadLine());
                 }
                 catch (Exception e)
                 {
@@ -353,9 +353,9 @@ namespace SubtitleModifier
             return res;
         }
 
-        static double[] GetDoubleArrFromUser(int minLength)
+        static decimal[] GetDoubleArrFromUser(int minLength)
         {
-            double[] res = null;
+            decimal[] res = null;
             string[] input;
             while (res == null)
             {
@@ -366,11 +366,11 @@ namespace SubtitleModifier
                     {
                         throw new ArgumentException();
                     }
-                    res = new double[input.Length];
+                    res = new decimal[input.Length];
                     // parse array
                     for(int ii = 0; ii < input.Length; ii++)
                     {
-                        res[ii] = double.Parse(input[ii]);
+                        res[ii] = decimal.Parse(input[ii]);
                     }
                 }
                 catch (Exception e)

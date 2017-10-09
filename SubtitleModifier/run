@@ -1,0 +1,3 @@
+#/bin/bash
+
+mono --debug bin/Release/SubtitleModifier.exe --runtime=v4.0 --config=Debug
