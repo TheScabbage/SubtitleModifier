@@ -139,12 +139,18 @@ namespace SubtitleModifier
     
 
 
+
+
+
+
+
+
     class Program
     {
         const string SP_SEPARATOR = "      ";
         const string TC_SEPARATOR = " ";
         const string FN_SEPARATOR = "   ";
-
+        static char[] SPLIT_CHARS = {' ', (char)9};
 
         static void Main(string[] args)
         {
@@ -244,41 +250,91 @@ namespace SubtitleModifier
                 // write the header information
                 for (int ii = 0; ii < headerText.Count; ii++)
                 {
+                    //DLog("Writing line " + headerText[ii]);
                     writer.WriteLine(headerText[ii]);
                 }
 
-
+                bool formatWarn =false;
                 for (int ii = 0; ii < subLines.Count; ii++)
                 {
-                    line = subLines[ii].Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
-                    writer.Write(line[0]);
-                    writer.Write(SP_SEPARATOR);
-                    // convert the start timecode to the new framerate
-                    Timecode tc = TimecodeFromString(line[1]);
-                    tc = tc.FromToFramerate(fromFPS, toFPS, offset);
-                    writer.Write(tc);
-                    writer.Write(TC_SEPARATOR);
-
-                    // now convert the end timecode
-                    tc = TimecodeFromString(line[2]);
-                    tc = tc.FromToFramerate(fromFPS, toFPS, offset);
-                    writer.Write(tc);
-                    writer.Write(FN_SEPARATOR);
-
-                    // now write the filename of this subtitle
-                    writer.Write(line[3]);
-
-                    // Don't write a newline if this is the last line of the file
-                    if(ii < subLines.Count - 1)
+                    try
                     {
-                        writer.WriteLine();
+                        //DLog("Parsing line '" + subLines[ii]+"'");
+                        
+                        if(isValidTimecodeLine(subLines[ii]))
+                        {
+                            line = subLines[ii].Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries);
+                            writer.Write(line[0].PadLeft(4, '0'));
+                            writer.Write(SP_SEPARATOR);
+                            // convert the start timecode to the new framerate
+                            Timecode tc = TimecodeFromString(line[1]);
+                            tc = tc.FromToFramerate(fromFPS, toFPS, offset);
+                            writer.Write(tc);
+                            writer.Write(TC_SEPARATOR);
+
+                            // now convert the end timecode
+                            tc = TimecodeFromString(line[2]);
+                            tc = tc.FromToFramerate(fromFPS, toFPS, offset);
+                            writer.Write(tc);
+                            writer.Write(FN_SEPARATOR);
+
+                            // now write the filename of this subtitle
+                            writer.Write(line[3]);
+
+                            // Don't write a newline if this is the last line of the file
+                            if(ii < subLines.Count - 1)
+                            {
+                                writer.WriteLine();
+                            }
+                        }else
+                        {
+                            Warn("Line " + (headerText.Count + ii + 1) + " is an invalid time code data line:\n'" + subLines[ii] + "'");
+                            if(!formatWarn)
+                            {
+                                formatWarn = true;
+                                Console.WriteLine("Expected format [int] [hh:mm:ss:ff] [hh:mm:ss:ff] [file].");
+                            }
+                            writer.WriteLine(subLines[ii]);
+                        }
+                    }catch(Exception e)
+                    {
+                        Console.WriteLine(e);
                     }
                 }
             }
             Console.WriteLine("Conversion complete.");
         }
 
+        static bool isValidTimecodeLine(String line)
+        {
+            String[] words = line.Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries);
+
+            if(words.Length == 4)
+            {
+                int sp;
+                if(int.TryParse(words[0], out sp))
+                {
+                    try
+                    {
+                        TimecodeFromString(words[1]);
+                        TimecodeFromString(words[2]);
+                        return true;
+                    }catch(Exception e){}
+                }
+            }
+
+            return false;
+        }
+
+        static void Warn(String msg)
+        {
+            Console.WriteLine("[WARN] " + msg);
+        }
+
+        static void DLog(String msg)
+        {
+            Console.WriteLine("[Debug] " + msg);
+        }
         
         static double GetDoubleFromUser()
         {
