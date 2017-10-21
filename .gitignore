@@ -237,3 +237,5 @@ ModelManifest.xml
 
 # FAKE - F# Make
 .fake/
+/SubtitleModifier/bin/Release/test_converted.sst
+/SubtitleModifier/bin/Release/test.sst
