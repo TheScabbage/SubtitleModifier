@@ -50,12 +50,12 @@ namespace SubtitleModifier
             ff = frames;
         }
 
-        public Timecode(double absoluteTime, double framerate)
+        public Timecode(decimal absoluteTime, decimal framerate)
         {
-            double remainingTime = absoluteTime;
-            hh = (int)(remainingTime / 3600d);
+            decimal remainingTime = absoluteTime;
+            hh = (int)(remainingTime / 3600m);
             remainingTime -= hh * 3600;
-            mm = (int)(remainingTime / 60d);
+            mm = (int)(remainingTime / 60m);
             remainingTime -= mm * 60;
             ss = (int)remainingTime;
             remainingTime -= ss;
@@ -80,11 +80,11 @@ namespace SubtitleModifier
         /// Gives the value of this timecode in absolute time, assuming the timecode is in the given framerate.
         /// </summary>
         /// <returns></returns>
-        public double GetAbsoluteTime(double framerate)
+        public decimal GetAbsoluteTime(decimal framerate)
         {
-            double result = 0d;
-            result += 3600d * hh;
-            result += 60d * mm;
+            decimal result = 0m;
+            result += 3600m * hh;
+            result += 60m * mm;
             result += ss;
             result += ff / framerate;
             return result;
@@ -96,10 +96,10 @@ namespace SubtitleModifier
         /// <param name="fps1"></param>
         /// <param name="fps2"></param>
         /// <returns></returns>
-        public Timecode FromToFramerate(double fps1, double fps2)
+        public Timecode FromToFramerate(decimal fps1, decimal fps2)
         {
             // Get the absolute time of this code in fps1:
-            double abs = GetAbsoluteTime(fps1);
+            decimal abs = GetAbsoluteTime(fps1);
             Timecode t2 = new Timecode(ConvertTime(abs, fps1, fps2), fps2);
             return t2;
         }
@@ -111,10 +111,10 @@ namespace SubtitleModifier
         /// <param name="fps2"></param>
         /// <param name="offset"></param>
         /// <returns></returns>
-        public Timecode FromToFramerate(double fps1, double fps2, double offset)
+        public Timecode FromToFramerate(decimal fps1, decimal fps2, decimal offset)
         {
             // Get the absolute time of this code in fps1:
-            double abs = GetAbsoluteTime(fps1);
+            decimal abs = GetAbsoluteTime(fps1);
             // Add the offset
             abs += offset;
             Timecode t2 = new Timecode(ConvertTime(abs, fps1, fps2), fps2);
@@ -127,7 +127,7 @@ namespace SubtitleModifier
         }
 
         
-        public static double ConvertTime(double abs, double fps1, double fps2)
+        public static decimal ConvertTime(decimal abs, decimal fps1, decimal fps2)
         {
             return abs * fps1 / fps2;
         }
@@ -139,12 +139,18 @@ namespace SubtitleModifier
     
 
 
+
+
+
+
+
+
     class Program
     {
         const string SP_SEPARATOR = "      ";
         const string TC_SEPARATOR = " ";
         const string FN_SEPARATOR = "   ";
-
+        static char[] SPLIT_CHARS = {' ', (char)9};
 
         static void Main(string[] args)
         {
@@ -218,8 +224,8 @@ namespace SubtitleModifier
                     }
                 } while (temp != null);
             }
-            double fromFPS = 0f, toFPS = 0f, offset = 0d;
-            double[] dArgs;
+            decimal fromFPS = 0m, toFPS = 0m, offset = 0m;
+            decimal[] dArgs;
             Console.WriteLine("Enter the FPS of the source file.\nOptionally, add an offset, in seconds, here.\neg. '25 2.5' would be 25FPS with an offset of 2.5 seconds.");
             dArgs = GetDoubleArrFromUser(1);
             fromFPS = dArgs[0];
@@ -244,50 +250,100 @@ namespace SubtitleModifier
                 // write the header information
                 for (int ii = 0; ii < headerText.Count; ii++)
                 {
+                    //DLog("Writing line " + headerText[ii]);
                     writer.WriteLine(headerText[ii]);
                 }
 
-
+                bool formatWarn =false;
                 for (int ii = 0; ii < subLines.Count; ii++)
                 {
-                    line = subLines[ii].Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
-                    writer.Write(line[0]);
-                    writer.Write(SP_SEPARATOR);
-                    // convert the start timecode to the new framerate
-                    Timecode tc = TimecodeFromString(line[1]);
-                    tc = tc.FromToFramerate(fromFPS, toFPS, offset);
-                    writer.Write(tc);
-                    writer.Write(TC_SEPARATOR);
-
-                    // now convert the end timecode
-                    tc = TimecodeFromString(line[2]);
-                    tc = tc.FromToFramerate(fromFPS, toFPS, offset);
-                    writer.Write(tc);
-                    writer.Write(FN_SEPARATOR);
-
-                    // now write the filename of this subtitle
-                    writer.Write(line[3]);
-
-                    // Don't write a newline if this is the last line of the file
-                    if(ii < subLines.Count - 1)
+                    try
                     {
-                        writer.WriteLine();
+                        //DLog("Parsing line '" + subLines[ii]+"'");
+                        
+                        if(isValidTimecodeLine(subLines[ii]))
+                        {
+                            line = subLines[ii].Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries);
+                            writer.Write(line[0].PadLeft(4, '0'));
+                            writer.Write(SP_SEPARATOR);
+                            // convert the start timecode to the new framerate
+                            Timecode tc = TimecodeFromString(line[1]);
+                            tc = tc.FromToFramerate(fromFPS, toFPS, offset);
+                            writer.Write(tc);
+                            writer.Write(TC_SEPARATOR);
+
+                            // now convert the end timecode
+                            tc = TimecodeFromString(line[2]);
+                            tc = tc.FromToFramerate(fromFPS, toFPS, offset);
+                            writer.Write(tc);
+                            writer.Write(FN_SEPARATOR);
+
+                            // now write the filename of this subtitle
+                            writer.Write(line[3]);
+
+                            // Don't write a newline if this is the last line of the file
+                            if(ii < subLines.Count - 1)
+                            {
+                                writer.WriteLine();
+                            }
+                        }else
+                        {
+                            Warn("Line " + (headerText.Count + ii + 1) + " is an invalid time code data line:\n'" + subLines[ii] + "'");
+                            if(!formatWarn)
+                            {
+                                formatWarn = true;
+                                Console.WriteLine("Expected format [int] [hh:mm:ss:ff] [hh:mm:ss:ff] [file].");
+                            }
+                            writer.WriteLine(subLines[ii]);
+                        }
+                    }catch(Exception e)
+                    {
+                        Console.WriteLine(e);
                     }
                 }
             }
             Console.WriteLine("Conversion complete.");
         }
 
-        
-        static double GetDoubleFromUser()
+        static bool isValidTimecodeLine(String line)
         {
-            double res = 0;
+            String[] words = line.Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries);
+
+            if(words.Length == 4)
+            {
+                int sp;
+                if(int.TryParse(words[0], out sp))
+                {
+                    try
+                    {
+                        TimecodeFromString(words[1]);
+                        TimecodeFromString(words[2]);
+                        return true;
+                    }catch(Exception e){}
+                }
+            }
+
+            return false;
+        }
+
+        static void Warn(String msg)
+        {
+            Console.WriteLine("[WARN] " + msg);
+        }
+
+        static void DLog(String msg)
+        {
+            Console.WriteLine("[Debug] " + msg);
+        }
+        
+        static decimal GetDoubleFromUser()
+        {
+            decimal res = 0;
             while (res <= 0)
             {
                 try
                 {
-                    res = double.Parse(Console.ReadLine());
+                    res = decimal.Parse(Console.ReadLine());
                 }
                 catch (Exception e)
                 {
@@ -297,9 +353,9 @@ namespace SubtitleModifier
             return res;
         }
 
-        static double[] GetDoubleArrFromUser(int minLength)
+        static decimal[] GetDoubleArrFromUser(int minLength)
         {
-            double[] res = null;
+            decimal[] res = null;
             string[] input;
             while (res == null)
             {
@@ -310,11 +366,11 @@ namespace SubtitleModifier
                     {
                         throw new ArgumentException();
                     }
-                    res = new double[input.Length];
+                    res = new decimal[input.Length];
                     // parse array
                     for(int ii = 0; ii < input.Length; ii++)
                     {
-                        res[ii] = double.Parse(input[ii]);
+                        res[ii] = decimal.Parse(input[ii]);
                     }
                 }
                 catch (Exception e)

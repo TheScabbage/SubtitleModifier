@@ -1,0 +1,3 @@
+#/bin/bash
+
+mcs Program.cs -out:bin/Release/SubtitleModifier.exe
