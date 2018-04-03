@@ -22,142 +22,26 @@ THE SOFTWARE.
 using System;
 using System.IO;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 
 namespace SubtitleModifier
 {
 
-    /// <summary>
-    /// Holds information about a timecode as well as conversion and parsing methods.
-    /// Note that a Timecode struct doesnt hold information about the FPS, which
-    /// affects how the actual time is calculated.
-    /// </summary>
-    struct Timecode
-    {
-        enum ConversionType {ROUND, FLOOR, CEILING}
-        static ConversionType CONV_TYPE = ConversionType.ROUND;
-
-        public int hh, mm, ss, ff;
-
-        public Timecode(int hours, int minutes, int seconds, int frames)
-        {
-            hh = hours;
-            mm = minutes;
-            ss = seconds;
-            ff = frames;
-        }
-
-        public Timecode(decimal absoluteTime, decimal framerate)
-        {
-            decimal remainingTime = absoluteTime;
-            hh = (int)(remainingTime / 3600m);
-            remainingTime -= hh * 3600;
-            mm = (int)(remainingTime / 60m);
-            remainingTime -= mm * 60;
-            ss = (int)remainingTime;
-            remainingTime -= ss;
-            switch (CONV_TYPE)
-            {
-                case ConversionType.FLOOR:
-                    ff = (int)Math.Floor(remainingTime * framerate);
-                    break;
-                case ConversionType.CEILING:
-                    ff = (int)Math.Ceiling(remainingTime * framerate);
-                    break;
-                case ConversionType.ROUND:
-                    ff = (int)Math.Round(remainingTime * framerate);
-                    break;
-                default:
-                    ff = (int)(remainingTime * framerate);
-                    break;
-            }
-        }
-
-        /// <summary>
-        /// Gives the value of this timecode in absolute time, assuming the timecode is in the given framerate.
-        /// </summary>
-        /// <returns></returns>
-        public decimal GetAbsoluteTime(decimal framerate)
-        {
-            decimal result = 0m;
-            result += 3600m * hh;
-            result += 60m * mm;
-            result += ss;
-            result += ff / framerate;
-            return result;
-        }
-
-        /// <summary>
-        /// Returns a timecode (in fps2) equivalent to this timecode (in fps1).
-        /// </summary>
-        /// <param name="fps1"></param>
-        /// <param name="fps2"></param>
-        /// <returns></returns>
-        public Timecode FromToFramerate(decimal fps1, decimal fps2)
-        {
-            // Get the absolute time of this code in fps1:
-            decimal abs = GetAbsoluteTime(fps1);
-            Timecode t2 = new Timecode(ConvertTime(abs, fps1, fps2), fps2);
-            return t2;
-        }
-
-        /// <summary>
-        /// Returns a timecode (in fps2) equivalent to this timecode (in fps1) with an offset, in seconds.
-        /// </summary>
-        /// <param name="fps1"></param>
-        /// <param name="fps2"></param>
-        /// <param name="offset"></param>
-        /// <returns></returns>
-        public Timecode FromToFramerate(decimal fps1, decimal fps2, decimal offset)
-        {
-            // Get the absolute time of this code in fps1:
-            decimal abs = GetAbsoluteTime(fps1);
-            // Add the offset
-            abs += offset;
-            Timecode t2 = new Timecode(ConvertTime(abs, fps1, fps2), fps2);
-            return t2;
-        }
-
-        public override string ToString()
-        {
-            return hh.ToString("D2") + ":" + mm.ToString("D2") + ":" + ss.ToString("D2") + ":" + ff.ToString("D2");
-        }
-
-        
-        public static decimal ConvertTime(decimal abs, decimal fps1, decimal fps2)
-        {
-            return abs * fps1 / fps2;
-        }
-        
-    }
-
-
-
-    
-
-
-
-
-
-
-
-
     class Program
     {
+        const string OFLAG_START = "-s";
+        const string OFLAG_ENDTC = "-e";
+        const string OFLAG_SECOND = "-t";
         const string SP_SEPARATOR = "      ";
         const string TC_SEPARATOR = " ";
         const string FN_SEPARATOR = "   ";
-        static char[] SPLIT_CHARS = {' ', (char)9};
+        static char[] SPLIT_CHARS = { ' ', (char)9 };
 
         static void Main(string[] args)
         {
             //DoTesting();
             Console.WriteLine("Hit CTRL-C at any time to quit.");
             RunConverter();
-            Console.ReadKey();
         }
 
         static void RunConverter()
@@ -197,52 +81,35 @@ namespace SubtitleModifier
             }
             List<string> headerText = new List<string>();
             List<string> subLines = new List<string>();
-            string temp = "";
-
+            
             Console.WriteLine("Reading input file...");
-            // get subtitle file into a buffered text reader
-            using (StreamReader reader = File.OpenText(path))
-            {
-                // get all the text before the actual subtitle lines start
-                // timecodes are preceded by the "SP_NUMBER  START  END  FILE_NAME" line.
-                while (!temp.ToUpper().StartsWith("SP_NUMBER"))
-                {
-                    // read all the header stuff (mostly human-readable information)
-                    temp = reader.ReadLine();
-                    //Console.WriteLine("HD: '" + temp + "'");
-                    headerText.Add(temp);
-                }
+            ReadTimecodeFile(path, out headerText, out subLines);
+            string startString = subLines[0].Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries)[1];
+            string endString = subLines[subLines.Count - 1].Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries)[1];
 
-                do
-                {
-                    // Now the timecodes start
-                    temp = reader.ReadLine();
-                    if (!String.IsNullOrWhiteSpace(temp))
-                    {
-                        //Console.WriteLine("TC: '" + temp + "'");
-                        subLines.Add(temp);
-                    }
-                } while (temp != null);
-            }
+            Console.WriteLine("File read. Subtitle Count: " + subLines.Count + "\nStart: " + startString + "\nEnd: " + endString);
+
             decimal fromFPS = 0m, toFPS = 0m, offset = 0m;
             decimal[] dArgs;
-            Console.WriteLine("Enter the FPS of the source file.\nOptionally, add an offset, in seconds, here.\neg. '25 2.5' would be 25FPS with an offset of 2.5 seconds.");
-            dArgs = GetDoubleArrFromUser(1);
-            fromFPS = dArgs[0];
-            if (dArgs.Length > 1)
-            {
-                offset = dArgs[1];
-            }
+            Console.WriteLine("Enter the FPS of the source file.\nOptionally, add a time offset here.");
+            Console.WriteLine("'25 -t 2.5' would be 25FPS with an offset of 2.5 seconds.");
+            Console.WriteLine("'30 -s hh:mm:ss:ff' would be 30FPS, starting at the given timecode.");
+            Console.WriteLine("'30 -e hh:mm:ss:ff' would be 30FPS, ending at the given timecode.");
+
+            Timecode startTC = TimecodeFromString(startString);
+            Timecode endTC = TimecodeFromString(endString);
+            GetFPSAndOffset(startTC, endTC, out fromFPS, out offset);
+            
+
             Console.WriteLine("Enter the FPS of the output file.");
-            toFPS = GetDoubleFromUser();
+            toFPS = GetDecimalFromUser();
 
             // Create the output file
             if (File.Exists(outputFile))
             {
                 File.Delete(outputFile);
             }
-
-            temp = "";
+            
             string[] line;
             Console.WriteLine("Writing to file " + outputFile + "...");
             using (StreamWriter writer = File.CreateText(outputFile))
@@ -254,14 +121,14 @@ namespace SubtitleModifier
                     writer.WriteLine(headerText[ii]);
                 }
 
-                bool formatWarn =false;
+                bool formatWarn = false;
                 for (int ii = 0; ii < subLines.Count; ii++)
                 {
                     try
                     {
                         //DLog("Parsing line '" + subLines[ii]+"'");
-                        
-                        if(isValidTimecodeLine(subLines[ii]))
+
+                        if (IsValidTimecodeLine(subLines[ii]))
                         {
                             line = subLines[ii].Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries);
                             writer.Write(line[0].PadLeft(4, '0'));
@@ -282,21 +149,23 @@ namespace SubtitleModifier
                             writer.Write(line[3]);
 
                             // Don't write a newline if this is the last line of the file
-                            if(ii < subLines.Count - 1)
+                            if (ii < subLines.Count - 1)
                             {
                                 writer.WriteLine();
                             }
-                        }else
+                        }
+                        else
                         {
                             Warn("Line " + (headerText.Count + ii + 1) + " is an invalid time code data line:\n'" + subLines[ii] + "'");
-                            if(!formatWarn)
+                            if (!formatWarn)
                             {
                                 formatWarn = true;
                                 Console.WriteLine("Expected format [int] [hh:mm:ss:ff] [hh:mm:ss:ff] [file].");
                             }
                             writer.WriteLine(subLines[ii]);
                         }
-                    }catch(Exception e)
+                    }
+                    catch (Exception e)
                     {
                         Console.WriteLine(e);
                     }
@@ -305,21 +174,135 @@ namespace SubtitleModifier
             Console.WriteLine("Conversion complete.");
         }
 
-        static bool isValidTimecodeLine(String line)
+        public static void GetFPSAndOffset(Timecode start, Timecode end, out decimal fromFPS, out decimal offset)
         {
-            String[] words = line.Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries);
+            offset = 0m;
+            decimal fps = 0m;
+            bool validInput = false;
+            do
+            {
+                string[] input = Console.ReadLine().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (input.Length == 0)
+                {
+                    // offset has not been set, just convert the fps
+                    if (decimal.TryParse(input[0], out fps) && fps > 0m)
+                    {
+                        validInput = true;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Invalid FPS. FPS must be a positive decimal number");
+                    }
+                }
+                else if (input.Length == 3)
+                {
+                    // offset has been requested, parse the fps and calculate offset
+                    if (decimal.TryParse(input[0], out fps) && fps > 0m)
+                    {
+                        if (CalculateOffset(start.GetAbsoluteTime(fps), end.GetAbsoluteTime(fps), fps, input[1], input[2], out offset))
+                        {
+                            validInput = true;
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("Invalid FPS. FPS must be a positive decimal number");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Invalid input count. Valid input is in the format [fps] <[offset flag] [offset]>");
+                }
+            } while (!validInput);
+            fromFPS = fps;
+        }
 
-            if(words.Length == 4)
+        // returns true if the input was valid, assigns it to the out param if so.
+        static bool CalculateOffset(decimal start, decimal end, decimal fps, string offsetFlag, string inOffset, out decimal offset)
+        {
+            switch (offsetFlag)
+            {
+                case OFLAG_SECOND:
+                    // offset is in seconds
+                    return decimal.TryParse(inOffset, out offset);
+                case OFLAG_START:
+                    // find the time in seconds of the start timecode
+                    try
+                    {
+                        Timecode t = TimecodeFromString(inOffset);
+                        offset = t.GetAbsoluteTime(fps) - start;
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("Invalid timecode. Timecodes should be in the format hh:mm:ss:ff.");
+                        offset = 0m;
+                        return false;
+                    }
+                    return true;
+                case OFLAG_ENDTC:
+                    // find the time in seconds of the end timecode
+                    try
+                    {
+                        Timecode t = TimecodeFromString(inOffset);
+                        offset = t.GetAbsoluteTime(fps) - end;
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("Invalid timecode. Timecodes should be in the format hh:mm:ss:ff.");
+                        offset = 0m;
+                        return false;
+                    }
+                    return true;
+            }
+            offset = 0m;
+            return false;
+        }
+
+        public static void ReadTimecodeFile(string path, out List<string> headerText, out List<string> subLines)
+        {
+            string current = "";
+            headerText = new List<string>();
+            subLines = new List<string>();
+            using (StreamReader reader = File.OpenText(path))
+            {
+                // get all the text before the actual subtitle lines start
+                // timecodes are preceded by the "SP_NUMBER  START  END  FILE_NAME" line.
+                while (!current.ToUpper().StartsWith("SP_NUMBER"))
+                {
+                    // read all the header stuff (mostly human-readable information)
+                    current = reader.ReadLine();
+                    //Console.WriteLine("HD: '" + temp + "'");
+                    headerText.Add(current);
+                }
+
+                do
+                {
+                    // Now the timecodes start
+                    current = reader.ReadLine();
+                    if (!string.IsNullOrWhiteSpace(current))
+                    {
+                        subLines.Add(current);
+                    }
+                } while (current != null);
+            }
+        }
+
+        static bool IsValidTimecodeLine(String line)
+        {
+            string[] words = line.Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries);
+
+            if (words.Length == 4)
             {
                 int sp;
-                if(int.TryParse(words[0], out sp))
+                if (int.TryParse(words[0], out sp))
                 {
                     try
                     {
                         TimecodeFromString(words[1]);
                         TimecodeFromString(words[2]);
                         return true;
-                    }catch(Exception e){}
+                    }
+                    catch (Exception e) { }
                 }
             }
 
@@ -335,8 +318,8 @@ namespace SubtitleModifier
         {
             Console.WriteLine("[Debug] " + msg);
         }
-        
-        static decimal GetDoubleFromUser()
+
+        static decimal GetDecimalFromUser()
         {
             decimal res = 0;
             while (res <= 0)
@@ -347,41 +330,12 @@ namespace SubtitleModifier
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine("Invalid input.");
+                    Console.WriteLine("Invalid input. Input should be a decimal number.");
                 }
             }
             return res;
         }
-
-        static decimal[] GetDoubleArrFromUser(int minLength)
-        {
-            decimal[] res = null;
-            string[] input;
-            while (res == null)
-            {
-                try
-                {
-                    input = Console.ReadLine().Split(' ');
-                    if(input.Length < minLength)
-                    {
-                        throw new ArgumentException();
-                    }
-                    res = new decimal[input.Length];
-                    // parse array
-                    for(int ii = 0; ii < input.Length; ii++)
-                    {
-                        res[ii] = decimal.Parse(input[ii]);
-                    }
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine("Invalid input.");
-                    res = null;
-                }
-            }
-            return res;
-        }
-
+        
         static void DoTesting()
         {
             Console.WriteLine("-----DEBUG-----");
@@ -389,10 +343,10 @@ namespace SubtitleModifier
 
 
             Console.WriteLine("-----DEBUG-----");
-            
+
         }
 
-        
+
         static Timecode TimecodeFromString(string timecode)
         {
             Timecode result = new Timecode();
