@@ -181,7 +181,12 @@ namespace SubtitleModifier
             bool validInput = false;
             do
             {
-                string[] input = Console.ReadLine().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                string rawInput = Console.ReadLine();
+                if (rawInput == null || rawInput == "")
+                {
+                    continue;
+                }
+                string[] input = rawInput.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 if (input.Length == 1)
                 {
                     // offset has not been set, just convert the fps
