@@ -65,9 +65,9 @@ namespace SubtitleModifier
             }
             string fileType = path.Substring(path.LastIndexOf("."));
             string fileName = path.Substring(0, path.LastIndexOf("."));
-            Console.WriteLine("File type: " + fileType);
+            //Console.WriteLine("File type: " + fileType);
             string outputFile = fileName + "_converted" + fileType;
-            Console.WriteLine("Output file: " + outputFile);
+            //Console.WriteLine("Output file: " + outputFile);
 
             // Warn user if an output file already exists
             if (File.Exists(outputFile))
@@ -182,7 +182,7 @@ namespace SubtitleModifier
             do
             {
                 string[] input = Console.ReadLine().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                if (input.Length == 0)
+                if (input.Length == 1)
                 {
                     // offset has not been set, just convert the fps
                     if (decimal.TryParse(input[0], out fps) && fps > 0m)
