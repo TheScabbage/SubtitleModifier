@@ -52,7 +52,7 @@ namespace SubtitleModifier
             while (path == "")
             {
                 path = Console.ReadLine();
-
+                path = path.Replace("\"", "");
                 if (!File.Exists(path))
                 {
                     if (!string.IsNullOrEmpty(path))
