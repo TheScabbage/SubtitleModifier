@@ -26,7 +26,7 @@ using System.Text.RegularExpressions;
 
 namespace SubtitleModifier
 {
-
+    enum Trit { TRUE, FALSE, UNKNOWN }
     class Program
     {
         const string OFLAG_START = "-s";
@@ -47,134 +47,184 @@ namespace SubtitleModifier
         static void RunConverter()
         {
             string path = "";
-            Console.WriteLine("Enter path of subtitle file:");
+            Console.WriteLine("Enter path or directory of subtitle file:");
+            bool isDirectory = false;
             // Get file path from user
             while (path == "")
             {
                 path = Console.ReadLine();
                 path = path.Replace("\"", "");
-                if (!File.Exists(path))
+                isDirectory = Directory.Exists(path);
+                if (!File.Exists(path) && !isDirectory)
                 {
                     if (!string.IsNullOrEmpty(path))
                     {
-                        Console.WriteLine("\nThe specified file '" + path + "' doesn't exist.");
+                        Console.WriteLine("\nThe specified file or directory '" + path + "' doesn't exist.");
                         Console.WriteLine("Re-enter file path or CTRL-C to exit.");
                     }
                     path = "";
                 }
             }
-            string fileType = path.Substring(path.LastIndexOf("."));
-            string fileName = path.Substring(0, path.LastIndexOf("."));
-            //Console.WriteLine("File type: " + fileType);
-            string outputFile = fileName + "_converted" + fileType;
-            //Console.WriteLine("Output file: " + outputFile);
 
-            // Warn user if an output file already exists
-            if (File.Exists(outputFile))
+            string dirPath = path;
+            string[] files;
+            Trit userOverwritePreference = Trit.UNKNOWN;
+            if (isDirectory)
             {
-                Console.WriteLine("Warning: An output file named '" + outputFile + "' already exists.\nDo you want to overwrite?");
-                string ans = Console.ReadLine().ToLower();
-                if (ans != "y" && ans != "yes")
-                {
-                    return;
-                }
+                files = Directory.GetFiles(dirPath, "*.sst");
+                Directory.CreateDirectory(dirPath + "Converted\\");
             }
-            List<string> headerText = new List<string>();
-            List<string> subLines = new List<string>();
-            
-            Console.WriteLine("Reading input file...");
-            ReadTimecodeFile(path, out headerText, out subLines);
-            string startString = subLines[0].Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries)[1];
-            string endString = subLines[subLines.Count - 1].Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries)[1];
-
-            Console.WriteLine("File read. Subtitle Count: " + subLines.Count + "\nStart: " + startString + "\nEnd: " + endString);
+            else
+            {
+                files = new string[] { path };
+            }
 
             decimal fromFPS = 0m, toFPS = 0m, offset = 0m;
-            decimal[] dArgs;
-            Console.WriteLine("Enter the FPS of the source file.\nOptionally, add a time offset here.");
-            Console.WriteLine("'25 -t 2.5' would be 25FPS with an offset of 2.5 seconds.");
-            Console.WriteLine("'30 -s hh:mm:ss:ff' would be 30FPS, starting at the given timecode.");
-            Console.WriteLine("'30 -e hh:mm:ss:ff' would be 30FPS, ending at the given timecode.");
 
-            Timecode startTC = TimecodeFromString(startString);
-            Timecode endTC = TimecodeFromString(endString);
-            GetFPSAndOffset(startTC, endTC, out fromFPS, out offset);
-            
-
-            Console.WriteLine("Enter the FPS of the output file.");
-            toFPS = GetDecimalFromUser();
-
-            // Create the output file
-            if (File.Exists(outputFile))
+            foreach (string enumeratedFile in files)
             {
-                File.Delete(outputFile);
-            }
-            
-            string[] line;
-            Console.WriteLine("Writing to file " + outputFile + "...");
-            using (StreamWriter writer = File.CreateText(outputFile))
-            {
-                // write the header information
-                for (int ii = 0; ii < headerText.Count; ii++)
+                path = enumeratedFile;
+                Console.WriteLine("Converting file '" + enumeratedFile + "'.");
+                string fileName = path.Substring(0, path.LastIndexOf("."));
+                int lastSlashIdx = path.LastIndexOf("\\");
+                lastSlashIdx = lastSlashIdx == -1 ? 0 : lastSlashIdx;
+                string outputFile = dirPath + "\\Converted" + path.Substring(lastSlashIdx, path.Length - lastSlashIdx);
+
+                //Console.WriteLine("Outputting file '" + outputFile + "'.");
+
+                // Warn user if an output file already exists
+                if (userOverwritePreference == Trit.UNKNOWN && File.Exists(outputFile))
                 {
-                    //DLog("Writing line " + headerText[ii]);
-                    writer.WriteLine(headerText[ii]);
+                    if (isDirectory)
+                        Warn("Output file(s) already exist. \nDo you want to overwrite?");
+                    else
+                        Warn("An output file named '" + outputFile + "' already exists.\nDo you want to overwrite?");
+                    string ans = Console.ReadLine().ToLower();
+                    if (ans != "y" && ans != "yes")
+                    {
+                        userOverwritePreference = Trit.FALSE;
+                    }
+                    userOverwritePreference = Trit.TRUE;
                 }
 
-                bool formatWarn = false;
-                for (int ii = 0; ii < subLines.Count; ii++)
+                // Skip the file if the user doesnt want to overwrite
+                if (userOverwritePreference == Trit.TRUE && File.Exists(outputFile))
                 {
-                    try
+                    continue;
+                }
+
+                List<string> headerText = new List<string>();
+                List<string> subLines = new List<string>();
+
+                Console.WriteLine("Reading input file...");
+                ReadTimecodeFile(path, out headerText, out subLines);
+                Console.WriteLine();
+                string startString = subLines[0];
+                string endString = subLines[subLines.Count - 1].Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries)[1];
+
+                Console.WriteLine("File read. Subtitle Count: " + subLines.Count + "\nStart: " + startString + "\nEnd: " + endString);
+
+                decimal[] dArgs;
+
+                if (fromFPS == 0)
+                {
+                    Console.WriteLine("Enter the FPS of the source file.\nOptionally, add a time offset here.");
+                    Console.WriteLine("'25 -t 2.5' would be 25FPS with an offset of 2.5 seconds.");
+                    Console.WriteLine("'30 -s hh:mm:ss:ff' would be 30FPS, starting at the given timecode.");
+                    Console.WriteLine("'30 -e hh:mm:ss:ff' would be 30FPS, ending at the given timecode.");
+                    int curLineIdx = 0;
+                    while (!IsValidTimecodeLine(subLines[curLineIdx]))
                     {
-                        //DLog("Parsing line '" + subLines[ii]+"'");
-
-                        if (IsValidTimecodeLine(subLines[ii]))
-                        {
-                            line = subLines[ii].Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries);
-                            writer.Write(line[0].PadLeft(4, '0'));
-                            writer.Write(SP_SEPARATOR);
-                            // convert the start timecode to the new framerate
-                            Timecode tc = TimecodeFromString(line[1]);
-                            tc = tc.FromToFramerate(fromFPS, toFPS, offset);
-                            writer.Write(tc);
-                            writer.Write(TC_SEPARATOR);
-
-                            // now convert the end timecode
-                            tc = TimecodeFromString(line[2]);
-                            tc = tc.FromToFramerate(fromFPS, toFPS, offset);
-                            writer.Write(tc);
-                            writer.Write(FN_SEPARATOR);
-
-                            // now write the filename of this subtitle
-                            writer.Write(line[3]);
-
-                            // Don't write a newline if this is the last line of the file
-                            if (ii < subLines.Count - 1)
-                            {
-                                writer.WriteLine();
-                            }
-                        }
-                        else
-                        {
-                            Warn("Line " + (headerText.Count + ii + 1) + " is an invalid time code data line:\n'" + subLines[ii] + "'");
-                            if (!formatWarn)
-                            {
-                                formatWarn = true;
-                                Console.WriteLine("Expected format [int] [hh:mm:ss:ff] [hh:mm:ss:ff] [file].");
-                            }
-                            writer.WriteLine(subLines[ii]);
-                        }
+                        curLineIdx++;
                     }
-                    catch (Exception e)
+                    Timecode startTC = TimecodeFromString(subLines[curLineIdx].Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries)[1]);
+                    Timecode endTC = TimecodeFromString(endString);
+                    GetFPSAndOffsetFromUser(startTC, endTC, out fromFPS, out offset);
+
+                    Console.WriteLine("Enter the FPS of the output file(s).");
+                    toFPS = GetDecimalFromUser();
+                }
+
+                // Create the output file
+                if (File.Exists(outputFile))
+                {
+                    File.Delete(outputFile);
+                }
+
+                string[] line;
+                Console.WriteLine("Writing to file " + outputFile + "...");
+                using (StreamWriter writer = File.CreateText(outputFile))
+                {
+                    // write the header information
+                    for (int ii = 0; ii < headerText.Count; ii++)
                     {
-                        Console.WriteLine(e);
+                        //DLog("Writing line " + headerText[ii]);
+                        writer.WriteLine(headerText[ii]);
+                    }
+
+                    bool formatWarn = false;
+                    for (int ii = 0; ii < subLines.Count; ii++)
+                    {
+                        try
+                        {
+                            //DLog("Parsing line '" + subLines[ii]+"'");
+
+                            if (IsValidTimecodeLine(subLines[ii]))
+                            {
+                                line = subLines[ii].Split(SPLIT_CHARS, StringSplitOptions.RemoveEmptyEntries);
+                                writer.Write(line[0].PadLeft(4, '0'));
+                                writer.Write(SP_SEPARATOR);
+                                // convert the start timecode to the new framerate
+                                Timecode tc = TimecodeFromString(line[1]);
+                                tc = tc.FromToFramerate(fromFPS, toFPS, offset);
+                                writer.Write(tc);
+                                writer.Write(TC_SEPARATOR);
+
+                                // now convert the end timecode
+                                tc = TimecodeFromString(line[2]);
+                                tc = tc.FromToFramerate(fromFPS, toFPS, offset);
+                                writer.Write(tc);
+                                writer.Write(FN_SEPARATOR);
+
+                                // now write the filename of this subtitle
+                                writer.Write(line[3]);
+
+                                // Don't write a newline if this is the last line of the file
+                                if (ii < subLines.Count - 1)
+                                {
+                                    writer.WriteLine();
+                                }
+                            }
+                            else
+                            {
+                                Warn("Line " + (headerText.Count + ii + 1) + " is an invalid time code data line:\n'" + subLines[ii] + "'");
+                                if (!formatWarn)
+                                {
+                                    formatWarn = true;
+                                    Console.WriteLine("Expected format [int] [hh:mm:ss:ff] [hh:mm:ss:ff] [file].");
+                                }
+                                //writer.WriteLine(subLines[ii]);
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine(e);
+                        }
                     }
                 }
+                Console.WriteLine("Conversion complete.");
             }
-            Console.WriteLine("Conversion complete.");
         }
 
-        public static void GetFPSAndOffset(Timecode start, Timecode end, out decimal fromFPS, out decimal offset)
+        /// <summary>
+        /// Gets the desired fps and offset from the user.
+        /// Blocks until valid input is specified.
+        /// </summary>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <param name="fromFPS"></param>
+        /// <param name="offset"></param>
+        public static void GetFPSAndOffsetFromUser(Timecode start, Timecode end, out decimal fromFPS, out decimal offset)
         {
             offset = 0m;
             decimal fps = 0m;
@@ -222,7 +272,16 @@ namespace SubtitleModifier
             fromFPS = fps;
         }
 
-        // returns true if the input was valid, assigns it to the out param if so.
+        /// <summary>
+        /// Returns true if the input was valid, assigns it to the out parameter if so.
+        /// </summary>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <param name="fps"></param>
+        /// <param name="offsetFlag"></param>
+        /// <param name="inOffset"></param>
+        /// <param name="offset"></param>
+        /// <returns></returns>
         static bool CalculateOffset(decimal start, decimal end, decimal fps, string offsetFlag, string inOffset, out decimal offset)
         {
             switch (offsetFlag)
@@ -268,6 +327,7 @@ namespace SubtitleModifier
             string current = "";
             headerText = new List<string>();
             subLines = new List<string>();
+
             using (StreamReader reader = File.OpenText(path))
             {
                 // get all the text before the actual subtitle lines start
@@ -284,9 +344,16 @@ namespace SubtitleModifier
                 {
                     // Now the timecodes start
                     current = reader.ReadLine();
-                    if (!string.IsNullOrWhiteSpace(current))
+                    if (subLines.Count == 0 && !IsValidTimecodeLine(current))
                     {
-                        subLines.Add(current);
+                        headerText.Add(current);
+                    }
+                    else
+                    {
+                        if (!string.IsNullOrWhiteSpace(current))
+                        {
+                            subLines.Add(current);
+                        }
                     }
                 } while (current != null);
             }
@@ -350,8 +417,7 @@ namespace SubtitleModifier
             Console.WriteLine("-----DEBUG-----");
 
         }
-
-
+        
         static Timecode TimecodeFromString(string timecode)
         {
             Timecode result = new Timecode();
